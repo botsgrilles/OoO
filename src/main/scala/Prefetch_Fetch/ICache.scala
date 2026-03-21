@@ -27,7 +27,7 @@ class ICacheInterface extends Bundle {
 
 class ICache extends Module {
     val io            = IO(new ICacheInterface)
-    val iCacheRefresh = IO(Input(Bool()))
+    val iCacheRefresh = IO(Input(Bool())) // iCacheRefresh 不是“刷新 cache”，只是“中止 refill”，命名存在误导
 
     // 使用默认参数，不进行参数化
     val cacheSize: Int = 8192 // 8KB Cache
@@ -63,17 +63,6 @@ class ICache extends Module {
     val data_array  = SyncReadMem(sets, Vec(ways, Vec(blockWords, UInt(32.W))))
     val lru_array   = RegInit(VecInit(Seq.fill(sets)(0.U(log2Ceil(ways).W))))
 
-    // 状态机
-    val sIdle :: sMiss :: sFill :: sWrite :: Nil = Enum(4)
-    val state                                    = RegInit(sIdle)
-
-    // Miss处理
-    val miss_addr    = RegInit(0.U(32.W))
-    val fill_counter = RegInit(0.U(log2Ceil(blockWords + 1).W))
-    val fill_way     = RegInit(0.U(log2Ceil(ways).W))
-    val fill_data    = Reg(Vec(blockWords, UInt(32.W)))
-    val old_data     = Reg(Vec(ways, Vec(blockWords, UInt(32.W))))
-
     // 读取tag和data
     val tag_read   = tag_array(req_index)
     val valid_read = valid_array(req_index)
@@ -99,13 +88,17 @@ class ICache extends Module {
     io.sram.req_data  := 0.U
     io.sram.req_be    := 0.U
 
+    // 状态机
+    val sIdle :: sMiss :: sFill :: sWrite :: Nil = Enum(4)
+    val state                                    = RegInit(sIdle)
+
     // 集中处理stall信号
     val should_stall = WireInit(false.B)
     switch(state) {
         is(sIdle) {
-            when(io.cpu.req_valid && !hit) { // CPU 的请求没有命中且请求有效
+            when(io.cpu.req_valid && !hit) { // Cache Miss
                 should_stall := true.B
-            }.otherwise {                    // 命中或请求无效
+            }.otherwise {
                 should_stall := false.B
             }
         }
@@ -121,30 +114,34 @@ class ICache extends Module {
     }
     io.cpu.stall := should_stall
 
+    // Miss处理
+    val miss_addr    = RegInit(0.U(32.W))
+    val fill_counter = RegInit(0.U(log2Ceil(blockWords + 1).W))
+    val fill_way     = RegInit(0.U(log2Ceil(ways).W))
+    val fill_data    = Reg(Vec(blockWords, UInt(32.W)))
+    val old_data     = Reg(Vec(ways, Vec(blockWords, UInt(32.W))))
+
     switch(state) {
         is(sIdle) {
             // io.cpu.stall := false.B
             when(io.cpu.req_valid) {
-                when(hit) {
-                    lru_array(req_index) := hit_way
-                }.elsewhen(!iCacheRefresh) {
-                    // Cache缺失
+                when(hit) { // Cache Hit
+                    lru_array(req_index) := ~hit_way // 这个 way hit 了，下次就不替换这个 way，记录信息
+                }.elsewhen(!iCacheRefresh) { // Cache Miss
                     state        := sMiss
                     miss_addr    := Cat(req_tag, req_index, 0.U(offsetBits.W))
                     fill_counter := 0.U
-                    fill_way     := lru_array(req_index) // 选择LRU way
+                    fill_way     := lru_array(req_index) // 选择 LRU way
                     old_data     := data_array.read(req_index)
-                    // io.cpu.stall := true.B
                 }
             }
         }
         is(sMiss) {
-            // 开始填充
             when(iCacheRefresh) {
                 state := sIdle
-            }.otherwise {
+            }.otherwise { // 向 SRAM 发起读请求，并切换至填充状态
                 state             := sFill
-                io.sram.req_valid := true.B
+                io.sram.req_valid := true.B 
                 io.sram.req_addr  := miss_addr + (fill_counter << 2)
                 io.sram.req_we    := false.B
                 io.sram.req_be    := "b1111".U
@@ -153,11 +150,9 @@ class ICache extends Module {
         }
         is(sFill) {
             when(iCacheRefresh) {
-                state := sIdle // Abort fill on refresh
-            }.elsewhen(io.sram.resp_valid) {
-                // io.cpu.stall            := true.B
-                fill_counter            := fill_counter + 1.U
-
+                state := sIdle
+            }.elsewhen(io.sram.resp_valid) { // 收到了 SRAM 的读请求
+                fill_counter := fill_counter + 1.U
                 when(fill_counter === blockWords.U) {
                     state := sWrite
                 }.otherwise {

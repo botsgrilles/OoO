@@ -6,12 +6,34 @@ import CONSTANTS.RAM_MAP._
 import CONSTANTS.CONFIG._
 import CONSTANTS.EXECUTION_CYCLE
 
+class MySRAMInterface extends Bundle {
+    // 对外部SRAM的接口
+    val data_in     = Input(UInt(32.W))
+    val data_out    = Output(UInt(32.W))
+    val data_out_en = Output(Bool())
+    val addr        = Output(UInt(log2Ceil(DataRAMSize / 4).W))
+    val be_n        = Output(UInt(4.W))
+    val ce_n        = Output(Bool())
+    val oe_n        = Output(Bool())
+    val we_n        = Output(Bool())
+}
+
+class UARTInterface extends Bundle {
+    val TxDReady = Input(Bool())
+    val TxDValid = Output(Bool())
+    val TxDData  = Output(UInt(8.W))
+
+    val RxdReady = Output(Bool())
+    val RxdValid = Input(Bool())
+    val RxdData  = Input(UInt(8.W))
+}
+
 /*
     内存控制器 - 支持并行访问
     优先级仲裁：iCache读 > WriteBuffer读 > WriteBuffer写
     不同设备可以并行访问（BaseRAM, ExtRAM, UART可以同时进行）
  */
-class SRAMControllerNew extends Module {
+class SRAMController extends Module {
     val io = IO(new Bundle {
         // iCache接口 (只读)
         val icache_req = new Bundle {
@@ -522,11 +544,4 @@ class SRAMControllerNew extends Module {
         io.wb_resp.valid := true.B
         io.wb_resp.data  := 0.U
     }
-}
-
-object SRAMControllerNew extends App {
-    ChiselStage.emitSystemVerilogFile(
-      new SRAMControllerNew(),
-      Array("--target-dir", "generated")
-    )
 }

@@ -21,7 +21,7 @@ class TOPDesign extends Module {
     val branchPrediction = Module(new BranchPrediction())
     val instRAMInterface = Module(new InstRAMInterface())
     val iCache           = Module(new ICache())
-    val sramController   = Module(new SRAMControllerNew())
+    val sramController   = Module(new SRAMController())
     // val instBuffer       = Module(new InstBuffer(capacity = 16))
     // Decode
     val pipeline_F_D = Module(new Pipline_F_D())
