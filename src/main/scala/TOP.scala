@@ -20,7 +20,7 @@ class TOPDesign extends Module {
     val branchArbiter    = Module(new BranchArbiter())
     val branchPrediction = Module(new BranchPrediction())
     val instRAMInterface = Module(new InstRAMInterface())
-    val iCache           = Module(new ICache(cacheSize = 8192, blockSize = 64, ways = 2))
+    val iCache           = Module(new ICache())
     val sramController   = Module(new SRAMControllerNew())
     // val instBuffer       = Module(new InstBuffer(capacity = 16))
     // Decode
@@ -62,26 +62,33 @@ class TOPDesign extends Module {
     val pauseResetController = Module(new PauseResetController())
     val reorderBuffer        = Module(new ReorderBuffer(nROBEntries, nPsyRegs = nPsyRegs))
 
+    /* -------------------------------------- */
     /* ---------- Prefetch & Fetch ---------- */
+    /* -------------------------------------- */
+
+    // brancbranchArbiter
     branchArbiter.io.in.pausePC_update      := pauseResetController.io.out.pause_PC_update
+
     branchArbiter.io.in.EX_PC_set           := branchResultController.io.out.mispredict
     branchArbiter.io.in.EX_true_PC          := branchResultController.io.out.target
     branchArbiter.io.in.Decode_PC_set       := pauseResetController.io.out.misPredictD
     branchArbiter.io.in.Decode_true_PC      := decoderArray.io.out.true_PC
     branchArbiter.io.in.direction_predicted := branchPrediction.io.out.direction_predicted
     branchArbiter.io.in.target_predicted    := branchPrediction.io.out.target_predicted
+
     branchArbiter.io.in.current_PC          := branchArbiter.io.out.PC_arbited
     branchArbiter.io.in.offset_predicted    := branchPrediction.io.out.offset_predicted
     branchArbiter.io.in.condition_predicted := branchPrediction.io.out.condition_predicted
     branchArbiter.io.in.removeMask          := pauseResetController.io.out.removeMask
 
-    branchPrediction.io.in.PC := branchArbiter.io.out.PC_arbited
+    // branchPrediction
+    branchPrediction.io.in.PC                := branchArbiter.io.out.PC_arbited
     branchPrediction.io.in.PC_where_branched := reorderBuffer.io.out.branch_info.PC_where_branched
-    branchPrediction.io.in.update_enable := reorderBuffer.io.out.branch_info.valid
-    branchPrediction.io.in.direction_true := reorderBuffer.io.out.branch_info.direction_true
-    branchPrediction.io.in.target_true     := reorderBuffer.io.out.branch_info.target_true
-    branchPrediction.io.in.branch_type     := reorderBuffer.io.out.branch_info.branch_type
-    branchPrediction.io.in.pause_PC_update := pauseResetController.io.out.pause_PC_update
+    branchPrediction.io.in.update_enable     := reorderBuffer.io.out.branch_info.valid
+    branchPrediction.io.in.direction_true    := reorderBuffer.io.out.branch_info.direction_true
+    branchPrediction.io.in.target_true       := reorderBuffer.io.out.branch_info.target_true
+    branchPrediction.io.in.branch_type       := reorderBuffer.io.out.branch_info.branch_type
+    branchPrediction.io.in.pause_PC_update   := pauseResetController.io.out.pause_PC_update
 
     instRAMInterface.io.in.PC   := branchArbiter.io.out.PC_arbited
     instRAMInterface.io.in.mask := pauseResetController.io.out.mask_inst

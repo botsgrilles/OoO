@@ -34,10 +34,3 @@ class InstRAMInterface extends Module {
         io.out.Insts := io.icache.resp_data
     }
 }
-
-object InstRAMInterface extends App {
-    ChiselStage.emitSystemVerilogFile(
-      new InstRAMInterface(),
-      Array("--target-dir", "generated")
-    )
-}

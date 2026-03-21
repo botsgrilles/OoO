@@ -298,10 +298,3 @@ class BranchPrediction extends Module {
         io.out.valid               := false.B // 分支预测器未启用时，默认无效
     }
 }
-
-object BranchPrediction extends App {
-    ChiselStage.emitSystemVerilogFile(
-      new BranchPrediction(),
-      Array("--target-dir", "generated")
-    )
-}
