@@ -14,19 +14,21 @@ import CONSTANTS.RAM_MAP.BASE_RAM_START
         1. 如果 EX 阶段的 PC_set 有效，则使用传来的 true_PC
         2. 如果 Decode 阶段的 PC_set 有效，则使用传来的 true_PC
         3. 如果分支预测器的dirction_predicted有效，则使用传来的target_predicted
-        4. 使用 {PC[31:4] + 1'b0, 4'b0000} 作为默认值
+        4. 使用 {PC[31:4] + 1'b1, 4'b0000} 作为默认值
  */
 
 class BranchArbiter extends Module {
     val io = IO(new Bundle {
         val in = new Bundle {
-            val pausePC_update      = Input(Bool())
-            val EX_PC_set           = Input(Bool())
-            val EX_true_PC          = Input(UInt(32.W))
-            val Decode_PC_set       = Input(Bool())
-            val Decode_true_PC      = Input(UInt(32.W))
-            val direction_predicted = Input(Bool())
-            val target_predicted    = Input(UInt(32.W))
+            val pausePC_update      = Input(Bool())     // 是否暂停当前 PC
+
+            val EX_PC_set           = Input(Bool())     // EX 阶段 PC 是否有效
+            val EX_true_PC          = Input(UInt(32.W)) // EX 阶段 PC 值
+            val Decode_PC_set       = Input(Bool())     // Decode 阶段 PC 是否有效
+            val Decode_true_PC      = Input(UInt(32.W)) // Decode 阶段 PC 值
+            val direction_predicted = Input(Bool())     // 分支跳转预测的 PC 是否有效
+            val target_predicted    = Input(UInt(32.W)) // 分支跳转预测的 PC 值
+
             val current_PC          = Input(UInt(32.W)) // 当前PC
             val offset_predicted    = Input(UInt(2.W))  // 分支预测器的偏移预测
             val condition_predicted = Input(Bool())     // 是否是条件分支
@@ -62,9 +64,8 @@ class BranchArbiter extends Module {
         reg_PC_arbited       := io.in.Decode_true_PC
         reg_offset_predicted := 3.U
         // reg_predicted_taken  := false.B
-    }.elsewhen( // 只有分支是条件分支时，才使用方向预测器的结果
-      validMask && !io.in.pausePC_update && io.in.current_PC(3, 2).asUInt <= io.in.offset_predicted
-    ) {
+    }.elsewhen( validMask && !io.in.pausePC_update ) {
+        // 只有分支是条件分支时，才使用方向预测器的结果
         reg_PC_arbited       := io.in.target_predicted
         reg_offset_predicted := io.in.offset_predicted
         // reg_predicted_taken  := predict_taken
@@ -72,27 +73,20 @@ class BranchArbiter extends Module {
         reg_PC_arbited := Mux(
           io.in.pausePC_update,
           io.in.current_PC,
-          Cat(io.in.current_PC(31, 4) + 1.U(28.W), 0.U(4.W))
+          Cat(io.in.current_PC(31, 4) + 1.U(28.W), 0.U(4.W)) // 即 PC + 16，一次取4条指令
         )
     }
     reg_offset_predicted := Mux(io.in.pausePC_update, reg_offset_predicted, io.in.offset_predicted)
     reg_predicted_taken := Mux(io.in.pausePC_update, reg_predicted_taken, io.in.direction_predicted)
 
     when(reset.asBool){
-        reg_PC_arbited       := BASE_RAM_START
-        reg_offset_predicted := 3.U
-        reg_predicted_taken  := false.B
+        reg_PC_arbited       := BASE_RAM_START // PC 的复位值 BASE_RAM_START 为 0x80000000
+        reg_offset_predicted := 3.U            // 偏移预测值默认为 3
+        reg_predicted_taken  := false.B        // 分支跳转预测默认为false
     }
 
     io.out.PC_arbited       := reg_PC_arbited
     io.out.offset_predicted := reg_offset_predicted
     io.out.predicted_taken  := reg_predicted_taken
     io.out.iCache_refresh   := iCache_refresh
-}
-
-object BranchArbiter extends App {
-    ChiselStage.emitSystemVerilogFile(
-      new BranchArbiter(),
-      Array("--target-dir", "generated")
-    )
 }

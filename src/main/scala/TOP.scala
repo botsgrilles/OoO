@@ -567,7 +567,3 @@ class TOPDesign extends Module {
 
     println(s"UART will be running at baud rate: \u001B[33m${BaudRate}\u001B[0m. FIFO Depth: \u001B[33m${UARTFIFODepth}\u001B[0m.\n")
 }
-
-object TOP extends App {
-    ChiselStage.emitSystemVerilogFile(new TOPDesign(), Array("--target-dir", "generated"))
-} 
